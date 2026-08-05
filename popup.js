@@ -23,7 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
   chrome.storage.local.get(
     {
       geminiApiKey: "",
-      geminiModel: "gemini-3.6-flash",
+      geminiModel: "gemini-3.5-flash-lite",
       enableOnFocus: true,
       enableOnSelection: true
     },
@@ -106,7 +106,8 @@ document.addEventListener("DOMContentLoaded", () => {
   runTestBtn.addEventListener("click", () => {
     const keyToUse = savedApiKey || apiKeyInput.value.trim();
     if (!keyToUse) {
-      alert("Please enter and save a Gemini API Key first.");
+      keyStatusMsg.textContent = "Please enter and save a Gemini API Key first.";
+      keyStatusMsg.className = "status-msg error";
       return;
     }
 

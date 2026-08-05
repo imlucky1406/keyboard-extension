@@ -8,7 +8,7 @@
   // Extension configurations
   let config = {
     apiKey: "",
-    model: "gemini-3.6-flash",
+    model: "gemini-3.5-flash-lite",
     enableOnFocus: true,
     enableOnSelection: true,
     auditMode: "auto",
@@ -32,6 +32,11 @@
   let lastAuditedText = "";
   let isAuditLoading = false;
   const auditCache = new Map();
+
+  // Selection caching state to prevent focus-loss on interactive clicks
+  let savedSelectionRange = null;
+  let savedSelectionStart = 0;
+  let savedSelectionEnd = 0;
 
   const BULB_PRESETS = [
     {
@@ -226,22 +231,40 @@
       align-items: center;
       background: white;
       border: 1px solid #dce4e8;
-      border-radius: 20px;
-      padding: 4px 8px;
+      border-radius: 50%;
+      padding: 5px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
       z-index: 2147483647;
       opacity: 0;
       pointer-events: none;
       transform: scale(0.9);
-      transition: opacity 0.25s, transform 0.25s, border-color 0.2s;
+      transition: opacity 0.25s, transform 0.25s, border-color 0.2s, width 0.25s, left 0.25s, border-radius 0.25s, padding 0.25s;
       height: 32px;
+      width: 32px;
       cursor: default;
+      overflow: hidden;
+      justify-content: flex-start;
+      white-space: nowrap;
     }
 
     .capsule-pill.visible {
       opacity: 1;
       pointer-events: auto;
       transform: scale(1);
+    }
+
+    .capsule-pill.visible.hovered {
+      border-color: #bbc7cf;
+      border-radius: 20px;
+      padding: 4px 8px;
+      width: 72px;
+    }
+
+    .capsule-pill.visible.selection-active {
+      border-color: #bbc7cf;
+      border-radius: 20px;
+      padding: 4px 8px;
+      width: 176px;
     }
 
     .selection-pill-label {
@@ -1016,6 +1039,15 @@
   const pillGreenCheck = pill.querySelector(".green-check");
   const pillAddBtn = pill.querySelector(".pill-add-btn");
 
+  pill.addEventListener("mouseenter", () => {
+    pill.classList.add("hovered");
+    positionCapsulePill();
+  });
+  pill.addEventListener("mouseleave", () => {
+    pill.classList.remove("hovered");
+    positionCapsulePill();
+  });
+
 
   // --- OVERLAY WIDGET INTERFACE CARD ---
   const widget = document.createElement("div");
@@ -1073,17 +1105,19 @@
     return false;
   }
 
-  // Find the closest ancestor that is editable (essential for contenteditable sub-spans in WhatsApp Web)
+  // Find the closest ancestor or topmost parent container that is editable.
+  // Walks all the way up to find the root editable context boundary for complex elements (like in WhatsApp Web & Instagram).
   function getClosestEditable(el) {
     if (!el) return null;
     let current = el;
+    let bestEditable = null;
     while (current) {
       if (isEditable(current)) {
-        return current;
+        bestEditable = current;
       }
       current = current.parentElement;
     }
-    return null;
+    return bestEditable;
   }
 
   // Get active text selection safely from input/textarea or page contenteditables
@@ -1124,7 +1158,19 @@
         }
         pillRedBadge.style.display = "none";
         pillGreenCheck.style.display = "none";
+
+        // Save active webpage selection range configurations
+        if (activeElement.tagName.toUpperCase() === "INPUT" || activeElement.tagName.toUpperCase() === "TEXTAREA") {
+          savedSelectionStart = activeElement.selectionStart;
+          savedSelectionEnd = activeElement.selectionEnd;
+        } else {
+          const sel = window.getSelection();
+          if (sel.rangeCount > 0) {
+            savedSelectionRange = sel.getRangeAt(0).cloneRange();
+          }
+        }
         
+        pill.classList.add("selection-active");
         positionCapsulePill();
       } else {
         if (isSelectionMode) {
@@ -1135,6 +1181,10 @@
           if (selLabel) {
             selLabel.style.display = "none";
           }
+          pill.classList.remove("selection-active");
+          savedSelectionRange = null;
+          savedSelectionStart = 0;
+          savedSelectionEnd = 0;
           updatePillCounter();
           positionCapsulePill();
         }
@@ -1150,75 +1200,161 @@
       : el.innerText;
   }
 
-  // Helper to find a text node containing target text inside contenteditable
-  function findTextNode(el, targetText) {
-    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
-    let node;
-    while (node = walk.nextNode()) {
-      if (node.textContent.includes(targetText)) {
-        return node;
+  // Save active webpage selection range configurations to prevent interactive focus loss
+  function saveCurrentSelection() {
+    const el = activeElement || lastActiveElement;
+    if (!el) return;
+    const nodeName = el.tagName.toUpperCase();
+    if (nodeName === "INPUT" || nodeName === "TEXTAREA") {
+      savedSelectionStart = el.selectionStart;
+      savedSelectionEnd = el.selectionEnd;
+    } else {
+      const sel = window.getSelection();
+      if (sel.rangeCount > 0) {
+        savedSelectionRange = sel.getRangeAt(0).cloneRange();
+      } else {
+        savedSelectionRange = null;
       }
     }
-    return null;
   }
 
-  // Swap target characters with corrections
-  function replaceText(original, replacement) {
-    if (!lastActiveElement) return;
-    
-    // Maintain target focus
-    lastActiveElement.focus();
+  // Restore cached selections to element focus
+  function restoreSelection(el) {
+    if (!el) return;
+    el.focus();
+    const nodeName = el.tagName.toUpperCase();
+    if (nodeName === "INPUT" || nodeName === "TEXTAREA") {
+      el.selectionStart = savedSelectionStart;
+      el.selectionEnd = savedSelectionEnd;
+    } else {
+      if (savedSelectionRange) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedSelectionRange);
+      }
+    }
+  }
 
-    if (lastActiveElement.tagName.toUpperCase() === "INPUT" || lastActiveElement.tagName.toUpperCase() === "TEXTAREA") {
-      const val = lastActiveElement.value;
-      const index = val.indexOf(original);
-      
-      if (index !== -1) {
-        lastActiveElement.value = val.substring(0, index) + replacement + val.substring(index + original.length);
-        
-        // Relocate cursor position
-        const newCursorPos = index + replacement.length;
-        lastActiveElement.selectionStart = newCursorPos;
-        lastActiveElement.selectionEnd = newCursorPos;
-        
-        // Alert frameworks
-        lastActiveElement.dispatchEvent(new Event("input", { bubbles: true }));
-        lastActiveElement.dispatchEvent(new Event("change", { bubbles: true }));
+  // Replaces the ENTIRE contents of the target textbox (input, textarea, or contenteditable)
+  // in a framework-safe way that supports Undo history and triggers React/Vue watchers.
+  function replaceElementContentEntirely(el, textToInsert) {
+    if (!el) return;
+    el.focus();
+    const nodeName = el.tagName.toUpperCase();
+    if (nodeName === "INPUT" || nodeName === "TEXTAREA") {
+      try {
+        // Select all text
+        el.selectionStart = 0;
+        el.selectionEnd = el.value.length;
+        // Use execCommand to replace selected text, preserving Undo history and updating React
+        const success = document.execCommand("insertText", false, textToInsert);
+        if (!success) {
+          throw new Error("execCommand failed");
+        }
+      } catch (e) {
+        // Fallback using Prototype Descriptor setter (React bypass)
+        try {
+          const prototype = nodeName === "TEXTAREA" ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+          const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+          if (descriptor && descriptor.set) {
+            descriptor.set.call(el, textToInsert);
+          } else {
+            el.value = textToInsert;
+          }
+        } catch (err) {
+          el.value = textToInsert;
+        }
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
       }
     } else {
-      // Contenteditable selection replacement using execCommand to trigger React/DraftJS listeners
+      // Contenteditable - select all contents natively at the text node level and insertText
       try {
-        const textNode = findTextNode(lastActiveElement, original);
-        if (textNode) {
-          const offset = textNode.textContent.indexOf(original);
+        el.focus();
+        
+        // Find text nodes to select at the leaf level
+        const textNodes = [];
+        const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        while (node = walk.nextNode()) {
+          if (!shadowRoot.contains(node)) {
+            textNodes.push(node);
+          }
+        }
+
+        if (textNodes.length > 0) {
           const range = document.createRange();
-          range.setStart(textNode, offset);
-          range.setEnd(textNode, offset + original.length);
+          range.setStart(textNodes[0], 0);
+          const lastNode = textNodes[textNodes.length - 1];
+          range.setEnd(lastNode, lastNode.textContent.length);
           
           const selection = window.getSelection();
           selection.removeAllRanges();
           selection.addRange(range);
-          
-          document.execCommand("insertText", false, replacement);
-        } else {
-          // Fallback to innerText swap if structure is unusual
-          const val = lastActiveElement.innerText;
-          const index = val.indexOf(original);
-          if (index !== -1) {
-            lastActiveElement.innerText = val.substring(0, index) + replacement + val.substring(index + original.length);
-            lastActiveElement.dispatchEvent(new Event("input", { bubbles: true }));
-            lastActiveElement.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        const success = document.execCommand("insertText", false, textToInsert);
+        if (!success) {
+          throw new Error("execCommand failed");
+        }
+      } catch (e) {
+        console.warn("Contenteditable entire replace failed, using fallback:", e);
+        el.innerText = textToInsert;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
+  }
+
+  // Replaces ONLY the currently selected text range in the target textbox (input, textarea, or contenteditable).
+  function replaceElementSelection(el, textToInsert) {
+    if (!el) return;
+    el.focus();
+    const nodeName = el.tagName.toUpperCase();
+    if (nodeName === "INPUT" || nodeName === "TEXTAREA") {
+      try {
+        // We assume selectionStart and selectionEnd are already set appropriately.
+        // Calling insertText will replace the current selection automatically
+        const success = document.execCommand("insertText", false, textToInsert);
+        if (!success) {
+          throw new Error("execCommand failed");
+        }
+      } catch (e) {
+        // Fallback fallback to direct value slice:
+        const val = el.value;
+        const start = el.selectionStart;
+        const end = el.selectionEnd;
+        const newVal = val.substring(0, start) + textToInsert + val.substring(end);
+        
+        try {
+          const prototype = nodeName === "TEXTAREA" ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+          const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+          if (descriptor && descriptor.set) {
+            descriptor.set.call(el, newVal);
+          } else {
+            el.value = newVal;
           }
+        } catch (err) {
+          el.value = newVal;
         }
-      } catch (err) {
-        console.error("TextNode swap failed, fallback to direct swap: ", err);
-        const val = lastActiveElement.innerText;
-        const index = val.indexOf(original);
-        if (index !== -1) {
-          lastActiveElement.innerText = val.substring(0, index) + replacement + val.substring(index + original.length);
-          lastActiveElement.dispatchEvent(new Event("input", { bubbles: true }));
-          lastActiveElement.dispatchEvent(new Event("change", { bubbles: true }));
+        el.selectionStart = start + textToInsert.length;
+        el.selectionEnd = start + textToInsert.length;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    } else {
+      // Contenteditable selection replacement
+      try {
+        // execCommand automatically replaces the current active selection range in contenteditable
+        const success = document.execCommand("insertText", false, textToInsert);
+        if (!success) {
+          throw new Error("execCommand failed");
         }
+      } catch (e) {
+        console.warn("Contenteditable selection replace failed, using fallback:", e);
+        el.innerText = textToInsert;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
       }
     }
   }
@@ -1241,6 +1377,25 @@
     }
   }
 
+  // Safe storage setter to catch context invalidation errors
+  function safeStorageSet(data, callback) {
+    try {
+      if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.id) {
+        console.warn("The extension context was invalidated (extension reloaded/updated). Please refresh this webpage to continue.");
+        return;
+      }
+      chrome.storage.local.set(data, () => {
+        if (chrome.runtime.lastError) {
+          console.warn("The extension context was invalidated (extension reloaded/updated). Please refresh this webpage to continue.");
+          return;
+        }
+        if (callback) callback();
+      });
+    } catch (e) {
+      console.warn("The extension context was invalidated (extension reloaded/updated). Please refresh this webpage to continue.");
+    }
+  }
+
   // Update capsule badges
   function updatePillCounter() {
     if (isSelectionMode) return; // Keep label visible during selection mode
@@ -1258,13 +1413,22 @@
     }
 
     const rect = activeElement.getBoundingClientRect();
-    if (rect.width < 80 || rect.height < 24) {
+    // Allow thin inputs or small chat boxes (e.g. WhatsApp, Instagram) to be detected securely
+    if (rect.width < 30 || rect.height < 10 || (rect.top === 0 && rect.left === 0)) {
       pill.classList.remove("visible");
       return;
     }
 
     const buttonHeight = 32;
-    const buttonWidth = pill.offsetWidth || 56;
+    const isHovered = pill.classList.contains("hovered");
+    
+    let buttonWidth = 32; // Collapsed circle width
+    if (isSelectionMode) {
+      buttonWidth = 176;
+    } else if (isHovered) {
+      buttonWidth = 72; // Expanded capsule width
+    }
+    
     const margin = 6;
 
     const pillTop = rect.bottom - buttonHeight - margin;
@@ -1301,6 +1465,7 @@
   // --- WINDOW FOCUS/INPUT ACTIONS BINDERS ---
 
   document.addEventListener("focus", (e) => {
+    if (e.target.getRootNode && e.target.getRootNode() === shadowRoot) return;
     const editable = getClosestEditable(e.target);
     if (editable) {
       activeElement = editable;
@@ -1311,6 +1476,7 @@
 
   // Click handler so clicking active contenteditable areas targets them immediately
   document.addEventListener("click", (e) => {
+    if (e.target.getRootNode && e.target.getRootNode() === shadowRoot) return;
     const editable = getClosestEditable(e.target);
     if (editable) {
       activeElement = editable;
@@ -1320,6 +1486,7 @@
   }, true);
 
   document.addEventListener("blur", (e) => {
+    if (e.target.getRootNode && e.target.getRootNode() === shadowRoot) return;
     setTimeout(() => {
       const editable = getClosestEditable(e.target);
       if (activeElement === editable && activeElement !== null && !isWidgetOpen) {
@@ -1330,6 +1497,7 @@
   }, true);
 
   document.addEventListener("input", (e) => {
+    if (e.target.getRootNode && e.target.getRootNode() === shadowRoot) return;
     const editable = getClosestEditable(e.target);
     if (activeElement === editable && activeElement !== null) {
       positionCapsulePill();
@@ -1337,6 +1505,7 @@
   });
 
   document.addEventListener("mouseup", (e) => {
+    if (e.target.getRootNode && e.target.getRootNode() === shadowRoot) return;
     handleTextSelection();
   });
 
@@ -1392,6 +1561,35 @@
     renderGeneratorBody();
   }
 
+  function openErrorView(title, errorMsg) {
+    isWidgetOpen = true;
+    hideCapsulePill();
+    
+    // Set headers
+    wgTitle.textContent = title;
+    wgCountBadge.style.display = "none";
+    wgVoiceBtn.style.display = "none";
+    wgCogBtn.style.display = "none";
+    
+    positionWidget();
+    widget.classList.add("visible");
+    
+    wgBodyContainer.innerHTML = `
+      <div class="clean-result-wrapper" style="text-align: center; padding: 24px 16px;">
+        <div class="clean-icon" style="font-size: 40px; margin-bottom: 12px; animation: bounce 1s infinite alternate;">⚠️</div>
+        <div class="clean-title" style="font-size: 15px; font-weight: 700; color: var(--g-red); margin-bottom: 8px;">Error Occurred</div>
+        <div class="clean-desc" style="font-size: 12.5px; color: #64748b; line-height: 1.5; margin-bottom: 16px; word-break: break-word; max-height: 180px; overflow-y: auto; padding: 6px 10px; border: 1px dashed rgba(224, 36, 36, 0.15); border-radius: 6px; background: rgba(224, 36, 36, 0.02); text-align: left;">
+          ${errorMsg}
+        </div>
+        <button class="btn-insert" style="width: 100%; border-radius: 6px;" id="btn-err-close">Close</button>
+      </div>
+    `;
+
+    wgBodyContainer.querySelector("#btn-err-close").addEventListener("click", () => {
+      closeWidget();
+    });
+  }
+
   function openQuickCorrectView(originalText, correctedText) {
     isWidgetOpen = true;
     hideCapsulePill();
@@ -1436,8 +1634,8 @@
 
     acceptBtn.addEventListener("click", () => {
       const finalText = resultOut.value;
-      if (finalText && finalText !== originalText) {
-        replaceText(originalText, finalText);
+      if (finalText && finalText !== originalText && lastActiveElement) {
+        replaceElementContentEntirely(lastActiveElement, finalText);
       }
       closeWidget();
     });
@@ -1480,18 +1678,21 @@
   });
 
   pillAddBtn.addEventListener("click", () => {
+    saveCurrentSelection();
     openGeneratorView();
   });
 
   function runActiveBulbPreset() {
     if (!config.apiKey) {
-      alert("Gemini API Key is missing! Opening settings page to set it up.");
       safeSendMessage({ action: "OPEN_SETTINGS" });
       return;
     }
 
     const targetElement = activeElement || lastActiveElement;
     if (!targetElement) return;
+
+    // Save active selections before executing request
+    saveCurrentSelection();
 
     const originalText = getElementText(targetElement).trim();
     if (!originalText) return;
@@ -1528,7 +1729,7 @@
         openQuickCorrectView(originalText, correctedText);
       } else {
         const errorMsg = response && response.error ? response.error : `Failed to run ${preset.title}.`;
-        alert(`Gemini Quick Correct Error:\n${errorMsg}`);
+        openErrorView("Quick Correct Error", errorMsg);
       }
     });
   }
@@ -1646,29 +1847,8 @@
       e.stopPropagation();
       const editedText = resultOut.value.trim();
       if (editedText && lastActiveElement) {
-        lastActiveElement.focus();
-        const nodeName = lastActiveElement.tagName.toUpperCase();
-        if (nodeName === "INPUT" || nodeName === "TEXTAREA") {
-          const val = lastActiveElement.value;
-          const start = lastActiveElement.selectionStart;
-          const end = lastActiveElement.selectionEnd;
-          lastActiveElement.value = val.substring(0, start) + editedText + val.substring(end);
-          
-          lastActiveElement.selectionStart = start + editedText.length;
-          lastActiveElement.selectionEnd = start + editedText.length;
-
-          lastActiveElement.dispatchEvent(new Event("input", { bubbles: true }));
-          lastActiveElement.dispatchEvent(new Event("change", { bubbles: true }));
-        } else {
-          try {
-            document.execCommand("insertText", false, editedText);
-          } catch (e) {
-            console.error("Selection replace failed: ", e);
-            lastActiveElement.innerText = editedText;
-            lastActiveElement.dispatchEvent(new Event("input", { bubbles: true }));
-            lastActiveElement.dispatchEvent(new Event("change", { bubbles: true }));
-          }
-        }
+        restoreSelection(lastActiveElement);
+        replaceElementSelection(lastActiveElement, editedText);
       }
       closeWidget();
     });
@@ -1878,7 +2058,7 @@
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         const selectedId = btn.getAttribute("data-id");
-        chrome.storage.local.set({ activeBulbPreset: selectedId }, () => {
+        safeStorageSet({ activeBulbPreset: selectedId }, () => {
           config.activeBulbPreset = selectedId;
           updateBulbButtonIcon();
           renderGeneratorBody();
@@ -2051,28 +2231,13 @@
       closeWidget();
     });
 
-    insertBtn.addEventListener("click", () => {
+    insertBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
       const editedDraftText = resultOut.value.trim();
       if (editedDraftText && lastActiveElement) {
-        lastActiveElement.focus();
-        if (lastActiveElement.tagName.toUpperCase() === "INPUT" || lastActiveElement.tagName.toUpperCase() === "TEXTAREA") {
-          lastActiveElement.value = editedDraftText;
-          lastActiveElement.dispatchEvent(new Event("input", { bubbles: true }));
-          lastActiveElement.dispatchEvent(new Event("change", { bubbles: true }));
-        } else {
-          try {
-            const range = document.createRange();
-            range.selectNodeContents(lastActiveElement);
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-            document.execCommand("insertText", false, editedDraftText);
-          } catch (err) {
-            lastActiveElement.innerText = editedDraftText;
-            lastActiveElement.dispatchEvent(new Event("input", { bubbles: true }));
-            lastActiveElement.dispatchEvent(new Event("change", { bubbles: true }));
-          }
-        }
+        restoreSelection(lastActiveElement);
+        replaceElementContentEntirely(lastActiveElement, editedDraftText);
       }
       closeWidget();
     });
@@ -2210,7 +2375,7 @@ Apply these voice settings seamlessly to the output. Do NOT include metadata or 
       };
       
       config.myVoice = updatedVoice;
-      chrome.storage.local.set({ myVoice: updatedVoice }, () => {
+      safeStorageSet({ myVoice: updatedVoice }, () => {
         openGeneratorView();
       });
     });
