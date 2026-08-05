@@ -33,6 +33,112 @@
   let isAuditLoading = false;
   const auditCache = new Map();
 
+  const BULB_PRESETS = [
+    {
+      id: "quickcorrect",
+      title: "Quick Correct",
+      desc: "Correct grammar & spelling errors strictly",
+      icon: "💡",
+      textColor: "#f43f5e",
+      iconHTML: `
+        <svg viewBox="0 0 24 24" style="width: 13px; height: 13px; display: block;">
+          <path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z" fill="currentColor"/>
+        </svg>
+      `,
+      prompt: "Check spelling and grammar. Correct all spelling, grammar, punctuation, and wording errors. Do NOT add any extra introductory text, notes, warnings, or comments. Return ONLY the final corrected text. Preserve the original sentence structures, length, tone, and formatting as closely as possible."
+    },
+    {
+      id: "improve",
+      title: "Improve it",
+      desc: "Polish grammar & flow",
+      icon: "🪄",
+      textColor: "#0ea5e9",
+      iconHTML: `🪄`,
+      prompt: "Improve grammar, spelling, flow and polish this text. Maintain the original message."
+    },
+    {
+      id: "professional",
+      title: "Professional Tone",
+      desc: "Convert text to formal business style",
+      icon: "💼",
+      textColor: "#3b82f6",
+      iconHTML: `💼`,
+      prompt: "Convert this text into a professional, polite, and formal business tone."
+    },
+    {
+      id: "casual",
+      title: "Casual Tone",
+      desc: "Convert text to warm conversational style",
+      icon: "👋",
+      textColor: "#10b981",
+      iconHTML: `👋`,
+      prompt: "Convert this text into a friendly, warm, casual, and conversational tone."
+    },
+    {
+      id: "genz",
+      title: "Gen Z Tone",
+      desc: "Translate using Gen Z slang fr fr",
+      icon: "💀",
+      textColor: "#ec4899",
+      iconHTML: `💀`,
+      prompt: "Convert this text into a Gen Z tone using popular slang like 'fr fr', 'no cap', 'bet', 'slay', 'lowkey', 'skibidi', etc., while keeping the original meaning."
+    },
+    {
+      id: "concise",
+      title: "Make Concise",
+      desc: "Condense to be clean, brief, and punchy",
+      icon: "📝",
+      textColor: "#eab308",
+      iconHTML: `📝`,
+      prompt: "Condense this text to make it clean, brief, concise, and punchy."
+    },
+    {
+      id: "simplify",
+      title: "Simplify & Format",
+      desc: "Clean problem statements",
+      icon: "📋",
+      textColor: "#06b6d4",
+      iconHTML: `📋`,
+      prompt: "Format this text into a clean, understandable, and well-structured statement. Use bullet points and appropriate spacing, but keep the statement exactly as it is without truncating or making it minimal."
+    },
+    {
+      id: "objections",
+      title: "Counterarguments",
+      desc: "Find weak areas or objections",
+      icon: "⚖️",
+      textColor: "#8b5cf6",
+      iconHTML: `⚖️`,
+      prompt: "Analyze this statement and politely suggest 2-3 counterarguments, potential weak areas, or objections, structured clearly."
+    }
+  ];
+
+  function updateBulbButtonIcon() {
+    if (typeof pillLeftBtn === "undefined" || !pillLeftBtn) return;
+    const preset = BULB_PRESETS.find(p => p.id === (config.activeBulbPreset || "quickcorrect")) || BULB_PRESETS[0];
+    const sparkCircle = pillLeftBtn.querySelector(".teal-spark-circle");
+    if (sparkCircle) {
+      if (!sparkCircle.style.animation.includes("spin")) {
+        sparkCircle.innerHTML = preset.iconHTML;
+        if (preset.id === "quickcorrect") {
+          sparkCircle.style.backgroundColor = "var(--g-teal)";
+          sparkCircle.style.color = "white";
+          const svgEl = sparkCircle.querySelector("svg");
+          if (svgEl) {
+            svgEl.style.width = "13px";
+            svgEl.style.height = "13px";
+            svgEl.style.fill = "white";
+          }
+        } else {
+          sparkCircle.style.backgroundColor = "transparent";
+          sparkCircle.style.color = "inherit";
+          sparkCircle.style.fontSize = "14px";
+          sparkCircle.style.lineHeight = "1";
+        }
+      }
+    }
+    updatePillCounter();
+  }
+
   // Load storage config
   function loadConfig() {
     chrome.storage.local.get({
@@ -41,6 +147,7 @@
       enableOnFocus: true,
       enableOnSelection: true,
       auditMode: "auto",
+      activeBulbPreset: "quickcorrect",
       myVoice: {
         formality: "Neutral",
         tones: ["Confident"]
@@ -51,9 +158,10 @@
       config.enableOnFocus = items.enableOnFocus;
       config.enableOnSelection = items.enableOnSelection;
       config.auditMode = items.auditMode || "auto";
+      config.activeBulbPreset = items.activeBulbPreset || "quickcorrect";
       config.myVoice = items.myVoice;
       
-      updatePillCounter();
+      updateBulbButtonIcon();
     });
   }
   loadConfig();
@@ -68,8 +176,12 @@
     if (changes.enableOnFocus) config.enableOnFocus = changes.enableOnFocus.newValue;
     if (changes.enableOnSelection) config.enableOnSelection = changes.enableOnSelection.newValue;
     if (changes.auditMode) config.auditMode = changes.auditMode.newValue;
+    if (changes.activeBulbPreset) {
+      config.activeBulbPreset = changes.activeBulbPreset.newValue || "quickcorrect";
+      updateBulbButtonIcon();
+    }
     
-    updatePillCounter();
+    updateBulbButtonIcon();
   });
 
   // Create isolated Shadow DOM
@@ -642,6 +754,15 @@
       border-color: rgba(17, 166, 131, 0.25);
     }
     
+    .preset-item.active {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      background: #f8fafc;
+      border-color: var(--g-teal);
+      cursor: default;
+    }
+    
     .preset-icon {
       font-size: 15px;
       display: flex;
@@ -874,7 +995,7 @@
   const pill = document.createElement("div");
   pill.className = "capsule-pill";
   pill.innerHTML = `
-    <div class="pill-group-left" title="Click to review spelling and grammar">
+    <div class="pill-group-left" title="Click to Quick Correct Grammar & Spelling">
       <div class="teal-spark-circle">
         <svg viewBox="0 0 24 24">
           <!-- Spark character icon path -->
@@ -1120,170 +1241,13 @@
     }
   }
 
-  // Debounced live spell/grammar auditing trigger (immediate = true when sentence finishes or on focus)
-  function handleInputAudit(text, immediate = false, force = false) {
-    if (isWidgetOpen) return; // Freeze API checks while user is reviewing active widgets
-    const trimmedText = text ? text.trim() : "";
-    if (trimmedText.length < 3) {
-      activeSuggestions = [];
-      apiError = "";
-      lastAuditedText = "";
-      updatePillCounter();
-      return;
-    }
-
-    // Block automatic audits if user has configured Manual Mode (bypass only on force)
-    if (config.auditMode === "manual" && !force) {
-      updatePillCounter();
-      return;
-    }
-
-    // 1. Skip if text is exactly the same as the last audit (prevents click/focus duplicate triggers)
-    if (trimmedText === lastAuditedText && !force) {
-      return;
-    }
-
-    // 2. Fetch from local cache if matches (saves a lot of quota tokens)
-    if (auditCache.has(trimmedText) && !force) {
-      apiError = "";
-      lastAuditedText = trimmedText;
-      activeSuggestions = [...auditCache.get(trimmedText)];
-      updatePillCounter();
-      return;
-    }
-
-    if (!config.apiKey) {
-      activeSuggestions = [];
-      apiError = "";
-      updatePillCounter();
-      return;
-    }
-
-    clearTimeout(checkDebounceTimer);
-    
-    // Only run audit if user finishes a sentence (immediate) or manually requests it (force)
-    if (!immediate && !force) {
-      return;
-    }
-
-    const delay = 350; // Brief delay to ensure typing input is fully finished and bound
-    checkDebounceTimer = setTimeout(() => {
-      // Guard against value updates while debouncing
-      if (activeElement && getElementText(activeElement).trim() !== trimmedText) return;
-      isAuditLoading = true;
-      updatePillCounter();
-
-      safeSendMessage({
-        type: "CHECK_GRAMMAR",
-        text: trimmedText,
-        apiKey: config.apiKey,
-        model: config.model
-      }, (response) => {
-        isAuditLoading = false;
-        if (response && response.success) {
-          apiError = "";
-          lastAuditedText = trimmedText;
-          if (Array.isArray(response.data)) {
-            activeSuggestions = response.data.filter(s => s.original && s.replacement);
-            auditCache.set(trimmedText, [...activeSuggestions]);
-            // Cap memory cache size to 100 entries
-            if (auditCache.size > 100) {
-              const firstKey = auditCache.keys().next().value;
-              auditCache.delete(firstKey);
-            }
-            updatePillCounter();
-
-            if (isWidgetOpen && wgTitle.textContent === "Review suggestions") {
-              renderSuggestionsBody();
-            }
-          }
-        } else {
-          activeSuggestions = [];
-          let rawErr = response && response.error ? response.error : "Failed connection to Gemini API.";
-          // User friendly rate limit warning
-          if (rawErr.includes("quota") || rawErr.includes("limit") || rawErr.includes("429")) {
-            rawErr = "Rate limit reached. Please wait a moment before retrying. Google's Free Tier has structured limits per minute.";
-          }
-          apiError = rawErr;
-          updatePillCounter();
-
-          if (isWidgetOpen && wgTitle.textContent === "Review suggestions") {
-            renderSuggestionsBody();
-          }
-        }
-      });
-    }, delay);
-  }
-
   // Update capsule badges
   function updatePillCounter() {
-    if (isSelectionMode) return; // Freeze badge state during selection Mode
-    
-    // Resolve audit text state
-    const text = lastActiveElement ? getElementText(lastActiveElement).trim() : "";
-    const hasScanned = (text === lastAuditedText);
+    if (isSelectionMode) return; // Keep label visible during selection mode
 
-    // 1. Missing API Key state
-    if (!config.apiKey) {
-      pillRedBadge.style.display = "none";
-      pillGreenCheck.textContent = "⚙️"; 
-      pillGreenCheck.style.display = "flex";
-      pillGreenCheck.style.color = "var(--g-gray)";
-      pillLeftBtn.setAttribute("title", "API key missing. Click to open settings.");
-      return;
-    }
-
-    // 2. API Error state
-    if (apiError) {
-      pillRedBadge.style.display = "none";
-      pillGreenCheck.textContent = "⚠️"; 
-      pillGreenCheck.style.color = "var(--g-red)";
-      pillGreenCheck.style.display = "flex";
-      pillLeftBtn.setAttribute("title", `API Error: ${apiError}. Click for details.`);
-      return;
-    }
-
-    // 2b. Audit Loading spinner state
-    if (isAuditLoading) {
-      pillRedBadge.style.display = "none";
-      pillGreenCheck.textContent = "⏳";
-      pillGreenCheck.style.display = "flex";
-      pillGreenCheck.style.color = "var(--g-teal)";
-      pillGreenCheck.style.animation = "spin 1s linear infinite";
-      pillLeftBtn.setAttribute("title", "AI is scanning your text...");
-      return;
-    }
-
-    // 3. Manual Mode & Unscanned state
-    if (config.auditMode === "manual" && !hasScanned && text.length >= 3) {
-      pillRedBadge.style.display = "none";
-      pillGreenCheck.textContent = "🔍"; 
-      pillGreenCheck.style.display = "flex";
-      pillGreenCheck.style.color = "var(--g-gray)";
-      pillGreenCheck.style.animation = "none";
-      pillLeftBtn.setAttribute("title", "Click to check spelling and grammar");
-      return;
-    }
-
-    // Restore default color
-    if (pillGreenCheck) {
-      pillGreenCheck.style.color = "var(--g-teal)";
-      pillGreenCheck.style.animation = "none";
-    }
-
-    // 3. Normal corrections counts
-    const len = activeSuggestions.length;
-    if (len > 0) {
-      pillRedBadge.textContent = len;
-      pillRedBadge.style.display = "flex";
-      pillGreenCheck.style.display = "none";
-      pillLeftBtn.setAttribute("title", "Click to review spelling and grammar");
-    } else {
-      pillRedBadge.style.display = "none";
-      pillGreenCheck.textContent = "✓";
-      pillGreenCheck.style.display = "flex";
-      pillLeftBtn.setAttribute("title", "All clean!");
-    }
+    pillRedBadge.style.display = "none";
+    pillGreenCheck.style.display = "none";
+    pillLeftBtn.setAttribute("title", "Click to Quick Correct Grammar & Spelling, or highlight text to rewrite");
   }
 
   // Position Capsule Pill overlay fixed near the bottom right of inputs
@@ -1339,15 +1303,8 @@
   document.addEventListener("focus", (e) => {
     const editable = getClosestEditable(e.target);
     if (editable) {
-      if (editable !== lastActiveElement) {
-        lastAuditedText = "";
-      }
       activeElement = editable;
       lastActiveElement = editable;
-      
-      // Instantly run audit check (immediate = true)
-      handleInputAudit(getElementText(activeElement), true);
-      // Give DOM time to reflow so sizes are correct
       setTimeout(positionCapsulePill, 40);
     }
   }, true);
@@ -1356,12 +1313,8 @@
   document.addEventListener("click", (e) => {
     const editable = getClosestEditable(e.target);
     if (editable) {
-      if (editable !== lastActiveElement) {
-        lastAuditedText = "";
-      }
       activeElement = editable;
       lastActiveElement = editable;
-      handleInputAudit(getElementText(activeElement), true);
       setTimeout(positionCapsulePill, 40);
     }
   }, true);
@@ -1379,15 +1332,7 @@
   document.addEventListener("input", (e) => {
     const editable = getClosestEditable(e.target);
     if (activeElement === editable && activeElement !== null) {
-      const text = getElementText(activeElement);
       positionCapsulePill();
-
-      // Check if last character typed is punctuation indicating a sentence end
-      const lastChar = text.slice(-1);
-      const isSentenceEnd = [".", "?", "!", "\n"].includes(lastChar) || 
-                            (text.length > 1 && [".", "?", "!"].includes(text.slice(-2, -1)) && lastChar === " ");
-      
-      handleInputAudit(text, isSentenceEnd);
     }
   });
 
@@ -1447,17 +1392,66 @@
     renderGeneratorBody();
   }
 
+  function openQuickCorrectView(originalText, correctedText) {
+    isWidgetOpen = true;
+    hideCapsulePill();
+    
+    positionWidget();
+    widget.classList.add("visible");
+    
+    renderQuickCorrectBody(originalText, correctedText);
+  }
+
+  function renderQuickCorrectBody(originalText, correctedText) {
+    updateHeader("quickcorrect");
+
+    wgBodyContainer.innerHTML = `
+      <div class="generator-body" style="padding: 12px 14px;">
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-size: 11.5px; font-weight: 600; color: var(--g-gray); margin-bottom: 4px;">Original Text</label>
+          <div style="font-size: 12px; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; max-height: 80px; overflow-y: auto; line-height: 1.4; white-space: pre-wrap; font-style: italic;">"${originalText}"</div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-size: 11.5px; font-weight: 600; color: var(--g-gray); margin-bottom: 4px;">Quick Correct Result</label>
+          <textarea class="result-textarea" id="g-quickcheck-out" style="height: 110px; width: 100%; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; font-size: 12.5px; resize: vertical; line-height: 1.4; outline: none;"></textarea>
+        </div>
+
+        <div class="result-actions" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px;">
+          <button class="btn-secondary" id="g-quickcheck-btn-deny" style="padding: 8px 16px; font-size: 12px; border-radius: 6px; cursor: pointer;">Deny</button>
+          <button class="btn-insert" id="g-quickcheck-btn-accept" style="padding: 8px 16px; font-size: 12px; border-radius: 6px; cursor: pointer;">Accept</button>
+        </div>
+      </div>
+    `;
+
+    const denyBtn = wgBodyContainer.querySelector("#g-quickcheck-btn-deny");
+    const acceptBtn = wgBodyContainer.querySelector("#g-quickcheck-btn-accept");
+    const resultOut = wgBodyContainer.querySelector("#g-quickcheck-out");
+    
+    resultOut.value = correctedText;
+
+    denyBtn.addEventListener("click", () => {
+      closeWidget();
+    });
+
+    acceptBtn.addEventListener("click", () => {
+      const finalText = resultOut.value;
+      if (finalText && finalText !== originalText) {
+        replaceText(originalText, finalText);
+      }
+      closeWidget();
+    });
+  }
+
   function closeWidget() {
     widget.classList.remove("visible");
     isWidgetOpen = false;
     generatedResultText = "";
     lastAuditedText = "";
     
-    // Restore focus to input elements, and re-run spell audits
+    // Restore focus to input elements
     if (lastActiveElement) {
       activeElement = lastActiveElement;
-      // Re-trigger layout audit with immediate check
-      handleInputAudit(getElementText(lastActiveElement), true);
       setTimeout(positionCapsulePill, 50);
     }
   }
@@ -1478,25 +1472,66 @@
   });
 
   pillLeftBtn.addEventListener("click", () => {
-    if (isAuditLoading) return; // Prevent double trigger while active check is running
-
     if (isSelectionMode) {
       openSelectionRefinedView();
     } else {
-      // If we are in manual mode and haven't audited this text yet:
-      const text = lastActiveElement ? getElementText(lastActiveElement).trim() : "";
-      const hasScanned = (text === lastAuditedText);
-      if (config.auditMode === "manual" && !hasScanned && text.length >= 3) {
-        handleInputAudit(text, true, true);
-        return; // Return immediately. The badge itself will spin, keeping the workspace clean.
-      }
-      openSuggestionsView();
+      runActiveBulbPreset();
     }
   });
 
   pillAddBtn.addEventListener("click", () => {
     openGeneratorView();
   });
+
+  function runActiveBulbPreset() {
+    if (!config.apiKey) {
+      alert("Gemini API Key is missing! Opening settings page to set it up.");
+      safeSendMessage({ action: "OPEN_SETTINGS" });
+      return;
+    }
+
+    const targetElement = activeElement || lastActiveElement;
+    if (!targetElement) return;
+
+    const originalText = getElementText(targetElement).trim();
+    if (!originalText) return;
+
+    const sparkCircle = pillLeftBtn.querySelector(".teal-spark-circle");
+    if (!sparkCircle) return;
+
+    // Guard against multi-click while animation is active
+    if (sparkCircle.style.animation.includes("spin")) return;
+
+    const activeId = config.activeBulbPreset || "quickcorrect";
+    const preset = BULB_PRESETS.find(p => p.id === activeId) || BULB_PRESETS[0];
+
+    const originalHTML = sparkCircle.innerHTML;
+    sparkCircle.innerHTML = "⏳";
+    sparkCircle.style.animation = "spin 1s linear infinite";
+    const oldTitle = pillLeftBtn.getAttribute("title");
+    pillLeftBtn.setAttribute("title", `Running ${preset.title}...`);
+
+    safeSendMessage({
+      type: "IMPROVE_TEXT",
+      text: originalText,
+      instruction: preset.prompt,
+      apiKey: config.apiKey,
+      model: config.model
+    }, (response) => {
+      // Restore bulb icon state
+      sparkCircle.innerHTML = originalHTML;
+      sparkCircle.style.animation = "none";
+      pillLeftBtn.setAttribute("title", oldTitle);
+
+      if (response && response.success && response.data) {
+        const correctedText = response.data.trim();
+        openQuickCorrectView(originalText, correctedText);
+      } else {
+        const errorMsg = response && response.error ? response.error : `Failed to run ${preset.title}.`;
+        alert(`Gemini Quick Correct Error:\n${errorMsg}`);
+      }
+    });
+  }
 
   // --- RENDERING ROUTINES ---
 
@@ -1518,43 +1553,51 @@
       return;
     }
 
+    // Build the dynamic presets list
+    let presetsHTML = "";
+    BULB_PRESETS.forEach(p => {
+      presetsHTML += `
+        <div class="preset-item" data-preset="${p.id}">
+          <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+            <div class="preset-icon" style="color: ${p.textColor}; font-size: 15px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: #ffffff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              ${p.id === 'quickcorrect' ? p.iconHTML : p.icon}
+            </div>
+            <div class="preset-content">
+              <span class="preset-title" style="font-weight: 600; font-size: 12px; color: #1e293b;">${p.title}</span>
+              <span class="preset-desc" style="font-size: 10.5px; color: #64748b;">${p.desc}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
     wgBodyContainer.innerHTML = `
-      <div class="generator-body">
-        <div class="form-group">
-          <label>Selected Text</label>
+      <div class="generator-body" style="text-align: left; padding: 4px 6px;">
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-size: 11.5px; font-weight: 600; color: var(--g-gray); margin-bottom: 4px;">Selected Text</label>
           <div style="font-size: 11.5px; color: var(--text-dark); background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; max-height: 80px; overflow-y: auto; font-style: italic; line-height: 1.4;">
             "${selectedText}"
           </div>
         </div>
 
-        <div class="form-group">
-          <label>Choose Rewrite Action</label>
-          <select id="g-refine-tone" class="g-select">
-            <option value="polish">✨ Polish (Fix Grammar & Flow)</option>
-            <option value="professional">💼 Professional Tone</option>
-            <option value="casual">👋 Casual Tone</option>
-            <option value="genz">💀 Gen Z Tone (no cap, fr fr)</option>
-            <option value="concise">📝 Make Concise</option>
-            <option value="simplify">📋 Simplify & Format Problem (for sharing)</option>
-          </select>
+        <h3 class="preset-header-main" style="margin: 0; font-size: 13px; font-weight: 700; color: #0f172a;">Rewrite Selection</h3>
+        <p class="preset-header-sub" style="margin: 4px 0 12px 0; font-size: 11px; color: #64748b;">Choose a preset rewrite action</p>
+
+        <div class="preset-list">
+          ${presetsHTML}
         </div>
 
-        <button class="btn-generate" id="g-refine-submit">
-          <span>⚡</span>
-          <span>Apply Rewrite</span>
-        </button>
-
-        <!-- Loader -->
-        <div class="ai-spinner-box" id="g-refine-loader" style="display: none;">
+        <!-- Loader box -->
+        <div class="ai-spinner-box" id="g-refine-loader" style="display: none; padding: 10px 0;">
           <div class="ai-spinner"></div>
           <span style="font-size: 11px; color: var(--g-gray);">Gemini is rewriting...</span>
         </div>
 
-        <!-- Error box -->
-        <div class="error-box" id="g-refine-error" style="display: none;"></div>
+        <!-- Error block -->
+        <div class="error-box" id="g-refine-error" style="display: none; margin-top: 10px;"></div>
 
         <!-- Result Preview box -->
-        <div class="generator-result-wrapper" id="g-refine-result-card" style="display: none;">
+        <div class="generator-result-wrapper" id="g-refine-result-card" style="display: none; margin-top: 10px;">
           <label style="font-size: 11px; font-weight: 600; color: var(--g-gray)">Improved Output</label>
           <textarea class="result-textarea" id="g-refine-result-out" style="height: 100px;"></textarea>
           <div class="result-actions">
@@ -1565,8 +1608,7 @@
       </div>
     `;
 
-    const toneSelect = wgBodyContainer.querySelector("#g-refine-tone");
-    const submitBtn = wgBodyContainer.querySelector("#g-refine-submit");
+    const presetItems = wgBodyContainer.querySelectorAll(".preset-item");
     const loader = wgBodyContainer.querySelector("#g-refine-loader");
     const errorBox = wgBodyContainer.querySelector("#g-refine-error");
     const resultCard = wgBodyContainer.querySelector("#g-refine-result-card");
@@ -1574,55 +1616,34 @@
     const cancelBtn = wgBodyContainer.querySelector("#g-refine-btn-cancel");
     const insertBtn = wgBodyContainer.querySelector("#g-refine-btn-insert");
 
-    submitBtn.addEventListener("click", () => {
-      const toneVal = toneSelect.value;
-      let toneInstruction = "";
-      if (toneVal === "polish") {
-        toneInstruction = "Polish this text to make it grammatically correct and flow naturally. Ensure the output message is clear but maintains original meaning.";
-      } else if (toneVal === "professional") {
-        toneInstruction = "Convert this text into a professional, polite, and formal business tone.";
-      } else if (toneVal === "casual") {
-        toneInstruction = "Convert this text into a friendly, warm, casual, and conversational tone.";
-      } else if (toneVal === "genz") {
-        toneInstruction = "Convert this text into a Gen Z tone using popular slang like 'fr fr', 'no cap', 'bet', 'slay', 'lowkey', 'skibidi', etc., while keeping the original meaning.";
-      } else if (toneVal === "concise") {
-        toneInstruction = "Condense this text to make it clean, brief, concise, and punchy.";
-      } else if (toneVal === "simplify") {
-        toneInstruction = "Format this text into a clean, understandable, and well-structured statement. Use bullet points and appropriate spacing, but keep the statement exactly as it is without truncating or making it minimal.";
-      }
+    presetItems.forEach(item => {
+      item.addEventListener("click", () => {
+        const type = item.getAttribute("data-preset");
 
-      errorBox.style.display = "none";
-      resultCard.style.display = "none";
-      loader.style.display = "flex";
-      submitBtn.disabled = true;
+        // Remove active class from all other items first
+        presetItems.forEach(pi => pi.classList.remove("active"));
 
-      safeSendMessage({
-        type: "IMPROVE_TEXT",
-        text: selectedText,
-        instruction: toneInstruction,
-        apiKey: config.apiKey,
-        model: config.model
-      }, (response) => {
-        loader.style.display = "none";
-        submitBtn.disabled = false;
+        // Add active style, append loader/results directly inside the clicked preset item!
+        item.classList.add("active");
+        item.appendChild(loader);
+        item.appendChild(errorBox);
+        item.appendChild(resultCard);
 
-        if (response && response.success) {
-          resultOut.value = response.data;
-          resultCard.style.display = "flex";
-          setTimeout(() => { wgBodyContainer.scrollTop = wgBodyContainer.scrollHeight; }, 50);
-        } else {
-          const errMsg = response && response.error ? response.error : "Failed polishing selection.";
-          errorBox.textContent = errMsg;
-          errorBox.style.display = "block";
-        }
+        const activePreset = BULB_PRESETS.find(p => p.id === type);
+        if (!activePreset) return;
+
+        triggerRefineTask(selectedText, activePreset.prompt);
       });
     });
 
-    cancelBtn.addEventListener("click", () => {
-      closeWidget();
+    cancelBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      resultCard.style.display = "none";
+      presetItems.forEach(pi => pi.classList.remove("active"));
     });
 
-    insertBtn.addEventListener("click", () => {
+    insertBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
       const editedText = resultOut.value.trim();
       if (editedText && lastActiveElement) {
         lastActiveElement.focus();
@@ -1651,153 +1672,66 @@
       }
       closeWidget();
     });
+
+    function triggerRefineTask(sourceText, taskInstruction) {
+      errorBox.style.display = "none";
+      resultCard.style.display = "none";
+      loader.style.display = "flex";
+
+      setTimeout(() => {
+        loader.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 50);
+
+      const finalInstruction = taskInstruction + getVoiceStylePrompt();
+
+      safeSendMessage({
+        type: "IMPROVE_TEXT",
+        text: sourceText,
+        instruction: finalInstruction,
+        apiKey: config.apiKey,
+        model: config.model
+      }, (response) => {
+        loader.style.display = "none";
+        if (response && response.success) {
+          resultOut.value = response.data;
+          resultCard.style.display = "flex";
+          setTimeout(() => {
+            resultCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            resultOut.focus();
+          }, 50);
+        } else {
+          errorBox.textContent = response && response.error ? response.error : "Failed connection.";
+          errorBox.style.display = "block";
+          setTimeout(() => {
+            errorBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }, 50);
+        }
+      });
+    }
   }
 
-  // 1. SUGGESTIONS VIEWER VIEW
+  // 1. SUGGESTIONS VIEWER VIEW (Replaced with Writing Guide)
   function renderSuggestionsBody() {
-    // 1. Check if API Key is configured
-    if (!config.apiKey) {
-      wgCountBadge.style.display = "none";
-      wgBodyContainer.innerHTML = `
-        <div class="clean-result-wrapper">
-          <div class="clean-icon">🔑</div>
-          <div class="clean-title">API Key Required</div>
-          <div class="clean-desc">To improve your grammar and spelling using Gemini AI, you must save an API Key first.</div>
-          <button class="btn-insert" style="margin-top: 12px; width: auto;" id="btn-open-settings-req">Configure Key</button>
-        </div>
-      `;
-      wgBodyContainer.querySelector("#btn-open-settings-req").addEventListener("click", () => {
-        safeSendMessage({ action: "OPEN_SETTINGS" });
-      });
-      return;
-    }
-
-    // 2. Check if there was an API connection error
-    if (apiError) {
-      wgCountBadge.style.display = "none";
-      wgBodyContainer.innerHTML = `
-        <div class="clean-result-wrapper">
-          <div class="clean-icon">⚠️</div>
-          <div class="clean-title">Gemini API Error</div>
-          <div class="clean-desc" style="color: var(--g-red); font-size: 11.5px; line-height: 1.4;">${apiError}</div>
-          <button class="btn-insert btn-secondary" style="margin-top: 12px; width: auto;" id="btn-retry-audit">Retry Audit</button>
-        </div>
-      `;
-      wgBodyContainer.querySelector("#btn-retry-audit").addEventListener("click", () => {
-        if (lastActiveElement) {
-          apiError = "";
-          handleInputAudit(getElementText(lastActiveElement), true, true);
-        }
-        closeWidget();
-      });
-      return;
-    }
-
-    wgCountBadge.style.display = "flex";
-    wgCountBadge.textContent = activeSuggestions.length;
-
-    if (activeSuggestions.length === 0) {
-      wgCountBadge.style.display = "none";
-      wgBodyContainer.innerHTML = `
-        <div class="clean-result-wrapper">
-          <div class="clean-icon">✨</div>
-          <div class="clean-title">All clean!</div>
-          <div class="clean-desc">No spelling or grammar errors found in this text.</div>
-          <button class="btn-insert btn-secondary" style="margin-top: 10px; width: auto;" id="btn-close-clean">Done</button>
-        </div>
-      `;
-      wgBodyContainer.querySelector("#btn-close-clean").addEventListener("click", closeWidget);
-      return;
-    }
-
-    if (currentSuggestionIndex >= activeSuggestions.length) {
-      currentSuggestionIndex = activeSuggestions.length - 1;
-    }
-    if (currentSuggestionIndex < 0) {
-      currentSuggestionIndex = 0;
-    }
-
-    const currentItem = activeSuggestions[currentSuggestionIndex];
-    const category = currentItem.category || "Correctness";
-    const description = currentItem.description || "Correction suggestion";
-    const oldText = currentItem.original;
-    const newText = currentItem.replacement;
-
-    // Snippet formatting matching live Grammarly layout: "hello Hello, how can you..."
-    const fullText = getElementText(lastActiveElement);
-    const wordIndex = fullText.indexOf(oldText);
-    let previewHTML = "";
-    
-    if (wordIndex !== -1) {
-      const restText = fullText.substring(wordIndex + oldText.length, wordIndex + oldText.length + 20);
-      const suffix = restText.length === 20 ? restText + "..." : restText;
-      previewHTML = `<span class="diff-removed">${oldText}</span><span class="diff-added">${newText}</span>${suffix}`;
-    } else {
-      // Fallback
-      previewHTML = `<span class="diff-removed">${oldText}</span> ➜ <span class="diff-added">${newText}</span>`;
-    }
-
-    const isPrevDisabled = currentSuggestionIndex === 0 ? "disabled" : "";
-    const isNextDisabled = currentSuggestionIndex === activeSuggestions.length - 1 ? "disabled" : "";
-
+    wgCountBadge.style.display = "none";
     wgBodyContainer.innerHTML = `
-      <div class="suggestions-body">
-        <div class="suggestion-category-row ${category.toLowerCase() === "style" ? "cat-clarity" : "cat-correctness"}">
-          <span style="font-size: 13px;">🔴</span>
-          <span>${category} · ${description}</span>
-        </div>
-        
-        <div class="suggestion-text-preview">
-          ${previewHTML}
-        </div>
-
-        <div class="suggestion-actions">
-          <div class="action-group">
-            <button class="btn-accept" id="btn-accept-sug">Accept</button>
-            <button class="btn-dismiss" id="btn-dismiss-sug">Dismiss</button>
+      <div class="clean-result-wrapper" style="text-align: left; padding: 16px;">
+        <div class="clean-icon" style="text-align: center; font-size: 28px; margin-bottom: 8px;">💡</div>
+        <div class="clean-title" style="text-align: center; margin-bottom: 12px; font-size: 15px;">Gemini Writing Guide</div>
+        <div style="font-size: 12.5px; color: var(--g-gray-dark); line-height: 1.5; display: flex; flex-direction: column; gap: 10px;">
+          <div>
+            <strong>✨ Rewrite Selections:</strong><br>
+            Drag your cursor to highlight/select any part of your text, then click the <strong>💡 Rewrite</strong> capsule button to rewrite, shorten, or change its tone.
           </div>
-
-          <div class="paging-section">
-            <button class="paging-arrow btn-prev-arrow" ${isPrevDisabled}>◀</button>
-            <span>${currentSuggestionIndex + 1} of ${activeSuggestions.length}</span>
-            <button class="paging-arrow btn-next-arrow" ${isNextDisabled}>▶</button>
+          <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 6px 0;">
+          <div>
+            <strong>➕ AI Response Drafter:</strong><br>
+            Click the <strong>+</strong> button on the floating capsule to draft messages or emails from scratch using custom agendas and topics.
           </div>
         </div>
+        <button class="btn-insert btn-secondary" style="margin-top: 15px; width: 100%;" id="btn-close-guide">Understood</button>
       </div>
     `;
-
-    // Bind Button Event Actions
-    const acceptBtn = wgBodyContainer.querySelector("#btn-accept-sug");
-    const dismissBtn = wgBodyContainer.querySelector("#btn-dismiss-sug");
-    const prevArrow = wgBodyContainer.querySelector(".btn-prev-arrow");
-    const nextArrow = wgBodyContainer.querySelector(".btn-next-arrow");
-
-    acceptBtn.addEventListener("click", () => {
-      replaceText(oldText, newText);
-      // Remove corrected suggestion
-      activeSuggestions.splice(currentSuggestionIndex, 1);
-      // Reposition and reload
-      renderSuggestionsBody();
-    });
-
-    dismissBtn.addEventListener("click", () => {
-      activeSuggestions.splice(currentSuggestionIndex, 1);
-      renderSuggestionsBody();
-    });
-
-    prevArrow.addEventListener("click", () => {
-      if (currentSuggestionIndex > 0) {
-        currentSuggestionIndex--;
-        renderSuggestionsBody();
-      }
-    });
-
-    nextArrow.addEventListener("click", () => {
-      if (currentSuggestionIndex < activeSuggestions.length - 1) {
-        currentSuggestionIndex++;
-        renderSuggestionsBody();
-      }
-    });
+    wgBodyContainer.querySelector("#btn-close-guide").addEventListener("click", closeWidget);
   }
 
   // 2. AI DRAFT GENERATOR VIEW
@@ -1805,43 +1739,72 @@
     updateHeader("generator");
     const rawInputValue = lastActiveElement ? getElementText(lastActiveElement).trim() : "";
 
+    const activeId = config.activeBulbPreset || "quickcorrect";
+    let bulbSelectorHTML = `
+      <div class="active-bulb-selector" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px; margin-bottom: 12px;">
+        <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
+          <span>📌 Assign Action to Bulb Icon:</span>
+        </div>
+        <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+    `;
+    
+    BULB_PRESETS.forEach(p => {
+      const isActive = (p.id === activeId);
+      const bg = isActive ? "var(--g-teal)" : "#f1f5f9";
+      const color = isActive ? "white" : "#475569";
+      const border = isActive ? "none" : "1px solid #cbd5e1";
+      bulbSelectorHTML += `
+        <button class="preset-assign-btn" data-id="${p.id}" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 11px; border-radius: 20px; background: ${bg}; color: ${color}; border: ${border}; cursor: pointer; transition: all 0.2s; font-weight: ${isActive ? 'bold' : 'normal'}">
+          <span style="font-size: 11px; width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${p.icon}</span>
+          <span>${p.title}</span>
+        </button>
+      `;
+    });
+    
+    bulbSelectorHTML += `
+        </div>
+      </div>
+    `;
+
+    // Build the dynamic presets list
+    let presetsHTML = "";
+    BULB_PRESETS.forEach(p => {
+      presetsHTML += `
+        <div class="preset-item" data-preset="${p.id}">
+          <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+            <div class="preset-icon" style="color: ${p.textColor}; font-size: 15px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: #ffffff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              ${p.id === 'quickcorrect' ? p.iconHTML : p.icon}
+            </div>
+            <div class="preset-content">
+              <span class="preset-title" style="font-weight: 600; font-size: 12px; color: #1e293b;">${p.title}</span>
+              <span class="preset-desc" style="font-size: 10.5px; color: #64748b;">${p.desc}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    presetsHTML += `
+      <div class="preset-item" data-preset="more">
+        <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+          <div class="preset-icon" style="color: #f59e0b; font-size: 15px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: #ffffff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">⏳</div>
+          <div class="preset-content">
+            <span class="preset-title" style="font-weight: 600; font-size: 12px; color: #1e293b;">More templates...</span>
+            <span class="preset-desc" style="font-size: 10.5px; color: #64748b;">Status checks, extensions, excused leave</span>
+          </div>
+        </div>
+      </div>
+    `;
+
     wgBodyContainer.innerHTML = `
       <div class="generator-body" style="text-align: left; padding: 4px 6px;">
+        ${bulbSelectorHTML}
+
         <h3 class="preset-header-main" style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;">What do you want to do?</h3>
         <p class="preset-header-sub" style="margin: 4px 0 12px 0; font-size: 11.5px; color: #64748b;">Here are some ideas</p>
 
         <div class="preset-list">
-          <div class="preset-item" data-preset="improve">
-            <div class="preset-icon" style="color: #0ea5e9;">🪄</div>
-            <div class="preset-content">
-              <span class="preset-title">Improve it</span>
-              <span class="preset-desc">Quickly polish grammar & spelling</span>
-            </div>
-          </div>
-          
-          <div class="preset-item" data-preset="simplify">
-            <div class="preset-icon" style="color: #10b981;">📋</div>
-            <div class="preset-content">
-              <span class="preset-title">Simplify & Format</span>
-              <span class="preset-desc">Understandable, clean problem statements</span>
-            </div>
-          </div>
-          
-          <div class="preset-item" data-preset="objections">
-            <div class="preset-icon" style="color: #8b5cf6;">💡</div>
-            <div class="preset-content">
-              <span class="preset-title">Suggest counterarguments</span>
-              <span class="preset-desc">Find weak areas or objections</span>
-            </div>
-          </div>
-
-          <div class="preset-item" data-preset="more">
-            <div class="preset-icon" style="color: #f59e0b;">⏳</div>
-            <div class="preset-content">
-              <span class="preset-title">More templates...</span>
-              <span class="preset-desc">Status checks, extensions, excused leave</span>
-            </div>
-          </div>
+          ${presetsHTML}
         </div>
 
         <!-- Custom Templates Subform (hidden initially) -->
@@ -1869,16 +1832,16 @@
         </div>
 
         <!-- Loader box -->
-        <div class="ai-spinner-box" id="g-loader" style="display: none;">
+        <div class="ai-spinner-box" id="g-loader" style="display: none; padding: 10px 0;">
           <div class="ai-spinner"></div>
           <span style="font-size: 11px; color: var(--g-gray);">Gemini is drafting...</span>
         </div>
 
         <!-- Error block -->
-        <div class="error-box" id="g-error" style="display: none;"></div>
+        <div class="error-box" id="g-error" style="display: none; margin-top: 10px;"></div>
 
         <!-- Result Preview box -->
-        <div class="generator-result-wrapper" id="g-result-card" style="display: none;">
+        <div class="generator-result-wrapper" id="g-result-card" style="display: none; margin-top: 10px;">
           <label style="font-size: 11px; font-weight: 600; color: var(--g-gray)">Draft Output</label>
           <textarea class="result-textarea" id="g-result-out" style="height: 120px;"></textarea>
           <div class="result-actions">
@@ -1909,6 +1872,20 @@
     const cancelBtn = wgBodyContainer.querySelector("#g-btn-cancel");
     const insertBtn = wgBodyContainer.querySelector("#g-btn-insert");
 
+    // Assign Buttons Setup
+    const assignBtns = wgBodyContainer.querySelectorAll(".preset-assign-btn");
+    assignBtns.forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const selectedId = btn.getAttribute("data-id");
+        chrome.storage.local.set({ activeBulbPreset: selectedId }, () => {
+          config.activeBulbPreset = selectedId;
+          updateBulbButtonIcon();
+          renderGeneratorBody();
+        });
+      });
+    });
+
     // Close subform
     closeSub.addEventListener("click", () => {
       subForm.style.display = "none";
@@ -1918,25 +1895,35 @@
     presetItems.forEach(item => {
       item.addEventListener("click", () => {
         const type = item.getAttribute("data-preset");
-        
-        if (type === "improve") {
-          subForm.style.display = "none";
-          triggerRewriteTask(rawInputValue, "Improve grammar, spelling, flow and polish this text. Maintain the original message.");
-        } else if (type === "simplify") {
-          subForm.style.display = "none";
-          triggerRewriteTask(rawInputValue, "Format this text into a clean, understandable, and well-structured statement. Use bullet points and appropriate spacing, but keep the statement exactly as it is without truncating or making it minimal.");
-        } else if (type === "objections") {
-          subForm.style.display = "none";
-          triggerRewriteTask(rawInputValue, "Analyze this statement and politely suggest 2-3 counterarguments, potential weak areas, or objections, structured clearly.");
-        } else if (type === "more") {
-          // Open more template subform configuration
+
+        // Remove active class from all other items first
+        presetItems.forEach(pi => pi.classList.remove("active"));
+
+        if (type === "more") {
           subForm.style.display = "block";
           subFormTitle.textContent = "More Writing Templates";
           fTopic.value = "Project Deadline Extension Request";
           fAgenda.value = "Need 2 more days because database API indexing issues slowed down our testing.";
           fPurpose.value = "Email Message";
+
+          // Re-append loader/results to bottom of generator body
+          const genBody = wgBodyContainer.querySelector(".generator-body");
+          genBody.appendChild(loader);
+          genBody.appendChild(errorBox);
+          genBody.appendChild(resultCard);
+
           setTimeout(() => { wgBodyContainer.scrollTop = wgBodyContainer.scrollHeight; }, 50);
+          return;
         }
+
+        // Add active style, append loader/results directly inside the clicked preset item!
+        item.classList.add("active");
+        item.appendChild(loader);
+        item.appendChild(errorBox);
+        item.appendChild(resultCard);
+
+        const activePreset = BULB_PRESETS.find(p => p.id === type) || BULB_PRESETS[0];
+        triggerRewriteTask(rawInputValue, activePreset.prompt);
       });
     });
 
@@ -1983,6 +1970,10 @@
       resultCard.style.display = "none";
       subForm.style.display = "none";
       loader.style.display = "flex";
+      
+      setTimeout(() => {
+        loader.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 50);
 
       const finalInstruction = taskInstruction + getVoiceStylePrompt();
 
@@ -1997,10 +1988,16 @@
         if (response && response.success) {
           resultOut.value = response.data;
           resultCard.style.display = "flex";
-          setTimeout(() => { wgBodyContainer.scrollTop = wgBodyContainer.scrollHeight; }, 50);
+          setTimeout(() => {
+            resultCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            resultOut.focus();
+          }, 50);
         } else {
           errorBox.textContent = response && response.error ? response.error : "Failed connection.";
           errorBox.style.display = "block";
+          setTimeout(() => {
+            errorBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }, 50);
         }
       });
     }
@@ -2017,6 +2014,10 @@
       resultCard.style.display = "none";
       subForm.style.display = "none";
       loader.style.display = "flex";
+      
+      setTimeout(() => {
+        loader.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 50);
 
       const finalTopic = topic + getVoiceStylePrompt();
 
@@ -2032,10 +2033,16 @@
         if (response && response.success) {
           resultOut.value = response.data;
           resultCard.style.display = "flex";
-          setTimeout(() => { wgBodyContainer.scrollTop = wgBodyContainer.scrollHeight; }, 50);
+          setTimeout(() => {
+            resultCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            resultOut.focus();
+          }, 50);
         } else {
           errorBox.textContent = response && response.error ? response.error : "Failed generating templates.";
           errorBox.style.display = "block";
+          setTimeout(() => {
+            errorBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }, 50);
         }
       });
     }
@@ -2100,6 +2107,9 @@ Apply these voice settings seamlessly to the output. Do NOT include metadata or 
       if (view === "suggestions") {
         wgTitle.textContent = "Review suggestions";
         wgCountBadge.style.display = "flex";
+      } else if (view === "quickcorrect") {
+        wgTitle.textContent = "Quick Correct";
+        wgCountBadge.style.display = "none";
       } else {
         wgTitle.textContent = "AI writer draft";
         wgCountBadge.style.display = "none";

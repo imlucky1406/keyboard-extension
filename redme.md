@@ -52,7 +52,7 @@ An elegant, selection-focused Chrome writing assistant powered by Google's Gemin
 ├── popup.html          # Settings UI page
 ├── popup.js            # Settings JS logic (saves API key and model preferences)
 ├── popup.css           # Styling for settings interface
-└── README.md           # This document
+└── redme.md            # This document
 ```
 
 ---

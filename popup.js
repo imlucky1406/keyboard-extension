@@ -8,7 +8,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const keyStatusMsg = document.getElementById("key-status-msg");
   
   const modelSelect = document.getElementById("model-select");
-  const auditModeSelect = document.getElementById("audit-mode-select");
   const toggleBubbleFocus = document.getElementById("toggle-bubble-focus");
   const toggleSelectionBubble = document.getElementById("toggle-selection-bubble");
   
@@ -26,8 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
       geminiApiKey: "",
       geminiModel: "gemini-3.6-flash",
       enableOnFocus: true,
-      enableOnSelection: true,
-      auditMode: "auto"
+      enableOnSelection: true
     },
     (items) => {
       savedApiKey = items.geminiApiKey;
@@ -41,7 +39,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       
       modelSelect.value = items.geminiModel;
-      auditModeSelect.value = items.auditMode || "auto";
       toggleBubbleFocus.checked = items.enableOnFocus;
       toggleSelectionBubble.checked = items.enableOnSelection;
     }
@@ -95,10 +92,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // 5. Auto-save Toggles & Dropdown changes
   modelSelect.addEventListener("change", () => {
     chrome.storage.local.set({ geminiModel: modelSelect.value });
-  });
-
-  auditModeSelect.addEventListener("change", () => {
-    chrome.storage.local.set({ auditMode: auditModeSelect.value });
   });
 
   toggleBubbleFocus.addEventListener("change", () => {
